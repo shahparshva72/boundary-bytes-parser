@@ -31,13 +31,17 @@ func (p *CSVParser) GetMatchFiles() ([]string, []string, error) {
 	var matchFiles, infoFiles []string
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".csv") {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".csv") {
+			continue
+		}
+		if strings.EqualFold(name, "all_matches.csv") {
 			continue
 		}
 
-		fullPath := filepath.Join(p.config.CSVDirectory, entry.Name())
+		fullPath := filepath.Join(p.config.CSVDirectory, name)
 
-		if strings.Contains(entry.Name(), "_info") {
+		if strings.Contains(name, "_info") {
 			infoFiles = append(infoFiles, fullPath)
 		} else {
 			matchFiles = append(matchFiles, fullPath)
