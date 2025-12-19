@@ -18,6 +18,9 @@ run-ipl:
 run-bbl:
 	go run ./cmd/seeder -league BBL
 
+run-wbbl:
+	go run ./cmd/seeder -league WBBL
+
 test:
 	go test ./...
 

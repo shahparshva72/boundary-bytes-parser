@@ -6,7 +6,7 @@ A high-performance CSV parser for cricket ball-by-ball data, designed to efficie
 
 - Concurrent processing with configurable worker count
 - Batch inserts using PostgreSQL's COPY protocol for maximum performance
-- Support for multiple leagues (WPL, IPL, BBL)
+- Support for multiple leagues (WPL, IPL, BBL, WBBL)
 - Skip existing data to avoid duplicate imports
 - Progress tracking with processing rate statistics
 
@@ -47,6 +47,7 @@ Process a specific league:
 ./bin/seeder -league WPL
 ./bin/seeder -league IPL
 ./bin/seeder -league BBL
+./bin/seeder -league WBBL
 ```
 
 Custom CSV directory:
@@ -69,12 +70,12 @@ Force processing even if data exists:
 
 ### Command Line Options
 
-| Flag             | Default           | Description                           |
-| ---------------- | ----------------- | ------------------------------------- |
-| `-league`        | (all)             | League to process: WPL, IPL, or BBL   |
-| `-csv-dir`       | current directory | Base directory containing CSV folders |
-| `-concurrency`   | number of CPUs    | Number of concurrent workers          |
-| `-skip-existing` | true              | Skip leagues that already have data   |
+| Flag             | Default           | Description                               |
+| ---------------- | ----------------- | ----------------------------------------- |
+| `-league`        | (all)             | League to process: WPL, IPL, BBL, or WBBL |
+| `-csv-dir`       | current directory | Base directory containing CSV folders     |
+| `-concurrency`   | number of CPUs    | Number of concurrent workers              |
+| `-skip-existing` | true              | Skip leagues that already have data       |
 
 ## CSV Directory Structure
 
@@ -88,7 +89,9 @@ csv-dir/
 │   └── ...
 ├── ipl_csv2/
 │   └── ...
-└── bbl_csv2/
+├── bbl_csv2/
+│   └── ...
+└── wbb_female_csv2/
     └── ...
 ```
 
