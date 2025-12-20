@@ -21,10 +21,11 @@ var leagueConfigs = map[string]models.LeagueConfig{
 	"IPL":  {League: "IPL", CSVDirectory: "ipl_csv2"},
 	"BBL":  {League: "BBL", CSVDirectory: "bbl_csv2"},
 	"WBBL": {League: "WBBL", CSVDirectory: "wbb_female_csv2"},
+	"SA20": {League: "SA20", CSVDirectory: "sat_male_csv2"},
 }
 
 func main() {
-	league := flag.String("league", "", "League to process (WPL, IPL, BBL, WBBL). If empty, processes all.")
+	league := flag.String("league", "", "League to process (WPL, IPL, BBL, WBBL, SA20). If empty, processes all.")
 	csvDir := flag.String("csv-dir", "", "Base directory containing CSV folders. Defaults to current directory.")
 	concurrency := flag.Int("concurrency", runtime.NumCPU(), "Number of concurrent workers")
 	skipExisting := flag.Bool("skip-existing", true, "Skip leagues that already have data")
@@ -72,7 +73,7 @@ func main() {
 		if config, ok := leagueConfigs[leagueUpper]; ok {
 			configsToProcess = append(configsToProcess, config)
 		} else {
-			fmt.Fprintf(os.Stderr, "Error: Invalid league '%s'. Valid options: WPL, IPL, BBL, WBBL\n", *league)
+			fmt.Fprintf(os.Stderr, "Error: Invalid league '%s'. Valid options: WPL, IPL, BBL, WBBL, SA20\n", *league)
 			os.Exit(1)
 		}
 	} else {

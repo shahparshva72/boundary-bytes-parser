@@ -21,6 +21,9 @@ run-bbl:
 run-wbbl:
 	go run ./cmd/seeder -league WBBL
 
+run-sa20:
+	go run ./cmd/seeder -league SA20
+
 test:
 	go test ./...
 
