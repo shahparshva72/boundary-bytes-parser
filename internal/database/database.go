@@ -15,7 +15,15 @@ type DB struct {
 }
 
 func NewDB(connectionString string) (*DB, error) {
-	pool, err := pgxpool.New(context.Background(), connectionString)
+	config, err := pgxpool.ParseConfig(connectionString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse connection string: %w", err)
+	}
+
+	// Disable prepared statement cache to avoid conflicts with concurrent connections
+	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
