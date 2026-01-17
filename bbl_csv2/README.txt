@@ -1,5 +1,5 @@
-All Men's Big Bash League match data in CSV format
-==================================================
+All Big Bash League match data in CSV format
+============================================
 
 The background
 --------------
@@ -14,7 +14,7 @@ he felt might work and, liking what I saw, I started to produce data in
 a slightly modified version of that initial example.
 
 This particular zip folder contains the CSV data for...
-  All Men's Big Bash League matches
+  All Big Bash League matches
 ...for which we have data.
 
 How you can help
@@ -119,6 +119,42 @@ the reason, while "other_player_dismissed" will show who was dismissed.
 Matches included in this archive
 --------------------------------
 
+2026-01-15 - club - BBL - male - 1493273 - Perth Scorchers vs Melbourne Renegades
+2026-01-14 - club - BBL - male - 1493272 - Brisbane Heat vs Hobart Hurricanes
+2026-01-13 - club - BBL - male - 1493271 - Adelaide Strikers vs Melbourne Stars
+2026-01-12 - club - BBL - male - 1493270 - Melbourne Renegades vs Sydney Thunder
+2026-01-11 - club - BBL - male - 1493269 - Perth Scorchers vs Adelaide Strikers
+2026-01-11 - club - BBL - male - 1493268 - Sydney Sixers vs Hobart Hurricanes
+2026-01-10 - club - BBL - male - 1493267 - Melbourne Renegades vs Melbourne Stars
+2026-01-10 - club - BBL - male - 1493266 - Sydney Thunder vs Brisbane Heat
+2026-01-09 - club - BBL - male - 1493265 - Hobart Hurricanes vs Adelaide Strikers
+2026-01-08 - club - BBL - male - 1493264 - Melbourne Stars vs Sydney Sixers
+2026-01-07 - club - BBL - male - 1493263 - Perth Scorchers vs Melbourne Renegades
+2026-01-06 - club - BBL - male - 1493262 - Adelaide Strikers vs Sydney Thunder
+2026-01-05 - club - BBL - male - 1493261 - Brisbane Heat vs Sydney Sixers
+2026-01-04 - club - BBL - male - 1493260 - Perth Scorchers vs Adelaide Strikers
+2026-01-04 - club - BBL - male - 1493259 - Melbourne Stars vs Melbourne Renegades
+2026-01-03 - club - BBL - male - 1493258 - Sydney Thunder vs Hobart Hurricanes
+2026-01-02 - club - BBL - male - 1493257 - Melbourne Stars vs Brisbane Heat
+2026-01-01 - club - BBL - male - 1493256 - Perth Scorchers vs Hobart Hurricanes
+2026-01-01 - club - BBL - male - 1493255 - Melbourne Renegades vs Sydney Sixers
+2025-12-31 - club - BBL - male - 1493254 - Brisbane Heat vs Adelaide Strikers
+2025-12-30 - club - BBL - male - 1493253 - Perth Scorchers vs Sydney Thunder
+2025-12-29 - club - BBL - male - 1493252 - Melbourne Renegades vs Hobart Hurricanes
+2025-12-28 - club - BBL - male - 1493251 - Sydney Thunder vs Melbourne Stars
+2025-12-27 - club - BBL - male - 1493250 - Brisbane Heat vs Adelaide Strikers
+2025-12-26 - club - BBL - male - 1493249 - Perth Scorchers vs Hobart Hurricanes
+2025-12-26 - club - BBL - male - 1493248 - Sydney Sixers vs Melbourne Stars
+2025-12-23 - club - BBL - male - 1493247 - Adelaide Strikers vs Melbourne Stars
+2025-12-22 - club - BBL - male - 1493246 - Sydney Thunder vs Brisbane Heat
+2025-12-21 - club - BBL - male - 1493245 - Melbourne Renegades vs Hobart Hurricanes
+2025-12-20 - club - BBL - male - 1493244 - Sydney Sixers vs Sydney Thunder
+2025-12-19 - club - BBL - male - 1493243 - Perth Scorchers vs Brisbane Heat
+2025-12-18 - club - BBL - male - 1493242 - Hobart Hurricanes vs Melbourne Stars
+2025-12-17 - club - BBL - male - 1493241 - Sydney Sixers vs Adelaide Strikers
+2025-12-16 - club - BBL - male - 1493240 - Sydney Thunder vs Hobart Hurricanes
+2025-12-15 - club - BBL - male - 1493239 - Melbourne Renegades vs Brisbane Heat
+2025-12-14 - club - BBL - male - 1493238 - Sydney Sixers vs Perth Scorchers
 2025-01-27 - club - BBL - male - 1443100 - Sydney Thunder vs Hobart Hurricanes
 2025-01-24 - club - BBL - male - 1443099 - Sydney Sixers vs Sydney Thunder
 2025-01-22 - club - BBL - male - 1443098 - Sydney Thunder vs Melbourne Stars
