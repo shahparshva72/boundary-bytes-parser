@@ -119,6 +119,28 @@ the reason, while "other_player_dismissed" will show who was dismissed.
 Matches included in this archive
 --------------------------------
 
+2026-01-15 - club - SAT - male - 1494277 - Pretoria Capitals vs Paarl Royals
+2026-01-14 - club - SAT - male - 1494276 - Sunrisers Eastern Cape vs Joburg Super Kings
+2026-01-13 - club - SAT - male - 1494275 - Durban's Super Giants vs Paarl Royals
+2026-01-12 - club - SAT - male - 1494274 - Pretoria Capitals vs MI Cape Town
+2026-01-11 - club - SAT - male - 1494273 - Sunrisers Eastern Cape vs Durban's Super Giants
+2026-01-10 - club - SAT - male - 1494272 - MI Cape Town vs Joburg Super Kings
+2026-01-10 - club - SAT - male - 1494271 - Pretoria Capitals vs Paarl Royals
+2026-01-08 - club - SAT - male - 1494269 - Joburg Super Kings vs Paarl Royals
+2026-01-07 - club - SAT - male - 1494268 - Pretoria Capitals vs Durban's Super Giants
+2026-01-06 - club - SAT - male - 1494267 - Joburg Super Kings vs MI Cape Town
+2026-01-05 - club - SAT - male - 1494266 - Pretoria Capitals vs Sunrisers Eastern Cape
+2026-01-04 - club - SAT - male - 1494265 - MI Cape Town vs Paarl Royals
+2026-01-02 - club - SAT - male - 1494262 - Paarl Royals vs MI Cape Town
+2026-01-01 - club - SAT - male - 1494261 - Joburg Super Kings vs Durban's Super Giants
+2025-12-31 - club - SAT - male - 1494260 - Pretoria Capitals vs MI Cape Town
+2025-12-31 - club - SAT - male - 1494259 - Sunrisers Eastern Cape vs Paarl Royals
+2025-12-30 - club - SAT - male - 1494258 - Durban's Super Giants vs Joburg Super Kings
+2025-12-29 - club - SAT - male - 1494257 - Sunrisers Eastern Cape vs Pretoria Capitals
+2025-12-28 - club - SAT - male - 1494256 - Durban's Super Giants vs MI Cape Town
+2025-12-27 - club - SAT - male - 1494255 - Sunrisers Eastern Cape vs Paarl Royals
+2025-12-27 - club - SAT - male - 1494254 - Joburg Super Kings vs Pretoria Capitals
+2025-12-26 - club - SAT - male - 1494253 - Durban's Super Giants vs MI Cape Town
 2025-02-08 - club - SAT - male - 1449667 - MI Cape Town vs Sunrisers Eastern Cape
 2025-02-06 - club - SAT - male - 1449666 - Paarl Royals vs Sunrisers Eastern Cape
 2025-02-05 - club - SAT - male - 1449665 - Sunrisers Eastern Cape vs Joburg Super Kings
