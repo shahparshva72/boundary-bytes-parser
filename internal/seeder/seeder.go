@@ -43,23 +43,30 @@ func (s *Seeder) Run(ctx context.Context, skipExisting bool) error {
 		return nil
 	}
 
-	if skipExisting {
-		exists, matchID, err := s.db.CheckLeagueExists(ctx, s.config.League)
-		if err != nil {
-			return fmt.Errorf("failed to check existing data: %w", err)
-		}
-		if exists {
-			fmt.Printf("Skipping %s seeding: existing data found (match id %d)\n", s.config.League, matchID)
-			return nil
-		}
-	}
-
 	matchFiles, infoFiles, err := s.parser.GetMatchFiles()
 	if err != nil {
 		return fmt.Errorf("failed to get match files: %w", err)
 	}
 
-	fmt.Printf("Found %d matches and %d info files for %s\n", len(matchFiles), len(infoFiles), s.config.League)
+	if skipExisting {
+		existingIDs, err := s.db.GetExistingMatchIDs(ctx, s.config.League)
+		if err != nil {
+			return fmt.Errorf("failed to get existing match IDs: %w", err)
+		}
+
+		if len(existingIDs) > 0 {
+			matchFiles = filterNewFiles(matchFiles, existingIDs, false)
+			infoFiles = filterNewFiles(infoFiles, existingIDs, true)
+			fmt.Printf("Skipping %d existing matches for %s\n", len(existingIDs), s.config.League)
+		}
+	}
+
+	fmt.Printf("Found %d new matches and %d new info files for %s\n", len(matchFiles), len(infoFiles), s.config.League)
+
+	if len(matchFiles) == 0 && len(infoFiles) == 0 {
+		fmt.Printf("No new data to process for %s\n", s.config.League)
+		return nil
+	}
 
 	stats := &Stats{}
 
@@ -204,4 +211,18 @@ func (s *Seeder) processMatchFile(ctx context.Context, filePath string) (int64, 
 	}
 
 	return count, nil
+}
+
+func filterNewFiles(files []string, existingIDs map[int]bool, isInfo bool) []string {
+	var newFiles []string
+	for _, f := range files {
+		matchID, err := parser.ExtractMatchID(f, isInfo)
+		if err != nil {
+			continue
+		}
+		if !existingIDs[matchID] {
+			newFiles = append(newFiles, f)
+		}
+	}
+	return newFiles
 }

@@ -54,6 +54,27 @@ func (db *DB) CheckLeagueExists(ctx context.Context, league string) (bool, int, 
 	return true, matchID, nil
 }
 
+func (db *DB) GetExistingMatchIDs(ctx context.Context, league string) (map[int]bool, error) {
+	rows, err := db.pool.Query(ctx, `
+		SELECT match_id FROM wpl_match WHERE league = $1
+	`, league)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	existing := make(map[int]bool)
+	for rows.Next() {
+		var matchID int
+		if err := rows.Scan(&matchID); err != nil {
+			return nil, err
+		}
+		existing[matchID] = true
+	}
+
+	return existing, rows.Err()
+}
+
 func (db *DB) UpsertMatch(ctx context.Context, match *models.Match) error {
 	_, err := db.pool.Exec(ctx, `
 		INSERT INTO wpl_match (match_id, league, season, start_date, venue)

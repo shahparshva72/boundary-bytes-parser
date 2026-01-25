@@ -264,6 +264,10 @@ func (p *CSVParser) ParseInfoFile(filePath string) (*models.MatchInfo, []models.
 	return matchInfo, teams, players, officials, peopleRegistry, nil
 }
 
+func ExtractMatchID(filePath string, isInfo bool) (int, error) {
+	return extractMatchID(filePath, isInfo)
+}
+
 func extractMatchID(filePath string, isInfo bool) (int, error) {
 	filename := filepath.Base(filePath)
 	var pattern string
