@@ -119,6 +119,15 @@ the reason, while "other_player_dismissed" will show who was dismissed.
 Matches included in this archive
 --------------------------------
 
+2026-01-25 - club - SAT - male - 1494286 - Pretoria Capitals vs Sunrisers Eastern Cape
+2026-01-23 - club - SAT - male - 1494285 - Paarl Royals vs Sunrisers Eastern Cape
+2026-01-22 - club - SAT - male - 1494284 - Paarl Royals vs Joburg Super Kings
+2026-01-21 - club - SAT - male - 1494283 - Sunrisers Eastern Cape vs Pretoria Capitals
+2026-01-19 - club - SAT - male - 1494282 - Joburg Super Kings vs Paarl Royals
+2026-01-18 - club - SAT - male - 1494281 - MI Cape Town vs Sunrisers Eastern Cape
+2026-01-17 - club - SAT - male - 1494280 - Pretoria Capitals vs Joburg Super Kings
+2026-01-17 - club - SAT - male - 1494279 - Durban's Super Giants vs Paarl Royals
+2026-01-16 - club - SAT - male - 1494278 - Sunrisers Eastern Cape vs MI Cape Town
 2026-01-15 - club - SAT - male - 1494277 - Pretoria Capitals vs Paarl Royals
 2026-01-14 - club - SAT - male - 1494276 - Sunrisers Eastern Cape vs Joburg Super Kings
 2026-01-13 - club - SAT - male - 1494275 - Durban's Super Giants vs Paarl Royals
