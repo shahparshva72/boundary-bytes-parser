@@ -119,6 +119,8 @@ the reason, while "other_player_dismissed" will show who was dismissed.
 Matches included in this archive
 --------------------------------
 
+2026-01-25 - club - BBL - male - 1493281 - Sydney Sixers vs Perth Scorchers
+2026-01-23 - club - BBL - male - 1493280 - Sydney Sixers vs Hobart Hurricanes
 2026-01-21 - club - BBL - male - 1493279 - Hobart Hurricanes vs Melbourne Stars
 2026-01-20 - club - BBL - male - 1493278 - Perth Scorchers vs Sydney Sixers
 2026-01-18 - club - BBL - male - 1493277 - Brisbane Heat vs Sydney Sixers
