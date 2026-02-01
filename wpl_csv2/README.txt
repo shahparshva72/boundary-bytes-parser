@@ -119,6 +119,11 @@ the reason, while "other_player_dismissed" will show who was dismissed.
 Matches included in this archive
 --------------------------------
 
+2026-01-30 - club - WPL - female - 1513700 - Gujarat Giants vs Mumbai Indians
+2026-01-29 - club - WPL - female - 1513699 - UP Warriorz vs Royal Challengers Bengaluru
+2026-01-27 - club - WPL - female - 1513698 - Gujarat Giants vs Delhi Capitals
+2026-01-26 - club - WPL - female - 1513697 - Mumbai Indians vs Royal Challengers Bengaluru
+2026-01-24 - club - WPL - female - 1513696 - Royal Challengers Bengaluru vs Delhi Capitals
 2026-01-22 - club - WPL - female - 1513695 - Gujarat Giants vs UP Warriorz
 2026-01-20 - club - WPL - female - 1513694 - Mumbai Indians vs Delhi Capitals
 2026-01-19 - club - WPL - female - 1513693 - Royal Challengers Bengaluru vs Gujarat Giants
