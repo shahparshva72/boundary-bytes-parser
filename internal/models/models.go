@@ -84,3 +84,18 @@ type LeagueConfig struct {
 	League       string
 	CSVDirectory string
 }
+
+type PlayerStyle struct {
+	Identifier      string
+	KeyCricinfo     int
+	Name            string
+	FullName        *string
+	BattingHand     *string
+	BowlingHand     *string
+	BowlingType     *string
+	BowlingSubType  *string
+	PlayingRole     string
+	PlayingRoleDetail string
+	BattingStyleRaw *string
+	BowlingStyleRaw *string
+}
