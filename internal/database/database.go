@@ -298,3 +298,56 @@ func (db *DB) InsertPersonRegistry(ctx context.Context, registry []models.Person
 func (db *DB) BeginTx(ctx context.Context) (pgx.Tx, error) {
 	return db.pool.Begin(ctx)
 }
+
+func (db *DB) GetPlayerStyleCount(ctx context.Context) (int, error) {
+	var count int
+	err := db.pool.QueryRow(ctx, `SELECT COUNT(*) FROM player_style`).Scan(&count)
+	return count, err
+}
+
+func (db *DB) UpsertPlayerStylesBulk(ctx context.Context, styles []models.PlayerStyle) (int64, error) {
+	if len(styles) == 0 {
+		return 0, nil
+	}
+
+	tx, err := db.pool.Begin(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Truncate for a clean reload since this is a lookup table
+	_, err = tx.Exec(ctx, `TRUNCATE TABLE player_style`)
+	if err != nil {
+		return 0, fmt.Errorf("failed to truncate player_style: %w", err)
+	}
+
+	rows := make([][]interface{}, len(styles))
+	for i, s := range styles {
+		rows[i] = []interface{}{
+			s.Identifier, s.KeyCricinfo, s.Name, s.FullName,
+			s.BattingHand, s.BowlingHand, s.BowlingType, s.BowlingSubType,
+			s.PlayingRole, s.PlayingRoleDetail, s.BattingStyleRaw, s.BowlingStyleRaw,
+		}
+	}
+
+	copyCount, err := tx.CopyFrom(
+		ctx,
+		pgx.Identifier{"player_style"},
+		[]string{
+			"identifier", "key_cricinfo", "name", "full_name",
+			"batting_hand", "bowling_hand", "bowling_type", "bowling_sub_type",
+			"playing_role", "playing_role_detail", "batting_style_raw", "bowling_style_raw",
+		},
+		pgx.CopyFromRows(rows),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to copy player styles: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return copyCount, nil
+}
