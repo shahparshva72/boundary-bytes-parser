@@ -58,15 +58,6 @@ func main() {
 		leagueConfigs[name] = config
 	}
 
-	db, err := database.NewDB(dbURL)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error connecting to database: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	ctx := context.Background()
-
 	var configsToProcess []models.LeagueConfig
 	if *league != "" {
 		leagueUpper := strings.ToUpper(*league)
@@ -81,6 +72,20 @@ func main() {
 			configsToProcess = append(configsToProcess, config)
 		}
 	}
+
+	poolSize := int32(*concurrency + 4)
+	if poolSize < 10 {
+		poolSize = 10
+	}
+
+	db, err := database.NewDB(dbURL, poolSize)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error connecting to database: %v\n", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
 
 	fmt.Println("Starting multi-league seed process...")
 	fmt.Printf("Concurrency: %d workers\n", *concurrency)

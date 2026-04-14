@@ -14,6 +14,11 @@ import (
 	"github.com/shahparshva72/boundary-bytes-parser/internal/models"
 )
 
+var (
+	matchFileRegex = regexp.MustCompile(`^(\d+)\.csv$`)
+	infoFileRegex  = regexp.MustCompile(`^(\d+)_info\.csv$`)
+)
+
 type CSVParser struct {
 	config models.LeagueConfig
 }
@@ -270,14 +275,13 @@ func ExtractMatchID(filePath string, isInfo bool) (int, error) {
 
 func extractMatchID(filePath string, isInfo bool) (int, error) {
 	filename := filepath.Base(filePath)
-	var pattern string
+	var re *regexp.Regexp
 	if isInfo {
-		pattern = `^(\d+)_info\.csv$`
+		re = infoFileRegex
 	} else {
-		pattern = `^(\d+)\.csv$`
+		re = matchFileRegex
 	}
 
-	re := regexp.MustCompile(pattern)
 	matches := re.FindStringSubmatch(filename)
 	if len(matches) < 2 {
 		return 0, fmt.Errorf("could not extract match ID from filename: %s", filename)

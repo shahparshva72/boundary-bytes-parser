@@ -3,7 +3,10 @@ package database
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,7 +17,7 @@ type DB struct {
 	pool *pgxpool.Pool
 }
 
-func NewDB(connectionString string) (*DB, error) {
+func NewDB(connectionString string, maxConns ...int32) (*DB, error) {
 	config, err := pgxpool.ParseConfig(connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse connection string: %w", err)
@@ -22,6 +25,30 @@ func NewDB(connectionString string) (*DB, error) {
 
 	// Disable prepared statement cache to avoid conflicts with concurrent connections
 	config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	// Tune pool size: use explicit value or default to max(numCPU, 10)
+	if len(maxConns) > 0 && maxConns[0] > 0 {
+		config.MaxConns = maxConns[0]
+	} else {
+		poolSize := int32(runtime.NumCPU())
+		if poolSize < 10 {
+			poolSize = 10
+		}
+		config.MaxConns = poolSize
+	}
+
+	// Session-level tuning for bulk loading:
+	// - synchronous_commit=off: don't wait for WAL flush (safe for seeder)
+	// - work_mem: larger sort buffers for index maintenance during COPY
+	// - maintenance_work_mem: larger buffers for index builds
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `
+			SET synchronous_commit = off;
+			SET work_mem = '128MB';
+			SET maintenance_work_mem = '256MB'
+		`)
+		return err
+	}
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
@@ -75,20 +102,126 @@ func (db *DB) GetExistingMatchIDs(ctx context.Context, league string) (map[int]b
 	return existing, rows.Err()
 }
 
-func (db *DB) UpsertMatch(ctx context.Context, match *models.Match) error {
-	_, err := db.pool.Exec(ctx, `
-		INSERT INTO wpl_match (match_id, league, season, start_date, venue)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (match_id) DO UPDATE SET
-			league = EXCLUDED.league,
-			season = EXCLUDED.season,
-			start_date = EXCLUDED.start_date,
-			venue = EXCLUDED.venue
-	`, match.ID, match.League, match.Season, match.StartDate, match.Venue)
+// BulkUpsertMatches upserts all matches in a single pgx.Batch round-trip.
+func (db *DB) BulkUpsertMatches(ctx context.Context, matches []*models.Match) error {
+	if len(matches) == 0 {
+		return nil
+	}
 
-	return err
+	batch := &pgx.Batch{}
+	for _, m := range matches {
+		batch.Queue(`
+			INSERT INTO wpl_match (match_id, league, season, start_date, venue)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (match_id) DO UPDATE SET
+				league = EXCLUDED.league,
+				season = EXCLUDED.season,
+				start_date = EXCLUDED.start_date,
+				venue = EXCLUDED.venue
+		`, m.ID, m.League, m.Season, m.StartDate, m.Venue)
+	}
+
+	br := db.pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for range matches {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("failed to upsert match: %w", err)
+		}
+	}
+
+	return nil
 }
 
+// InsertDeliveriesBulk inserts ALL deliveries via a single CopyFrom call.
+func (db *DB) InsertDeliveriesBulk(ctx context.Context, deliveries []models.Delivery) (int64, error) {
+	if len(deliveries) == 0 {
+		return 0, nil
+	}
+
+	rows := deliveriesToRows(deliveries)
+
+	copyCount, err := db.pool.CopyFrom(
+		ctx,
+		pgx.Identifier{"wpl_delivery"},
+		deliveryColumns,
+		pgx.CopyFromRows(rows),
+	)
+
+	return copyCount, err
+}
+
+// InsertDeliveriesParallel splits deliveries into N chunks and COPYs them
+// in parallel across separate pool connections for maximum throughput.
+func (db *DB) InsertDeliveriesParallel(ctx context.Context, deliveries []models.Delivery, workers int) (int64, error) {
+	if len(deliveries) == 0 {
+		return 0, nil
+	}
+	if workers <= 1 {
+		return db.InsertDeliveriesBulk(ctx, deliveries)
+	}
+
+	chunkSize := (len(deliveries) + workers - 1) / workers
+	var totalInserted int64
+	var firstErr error
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for i := 0; i < len(deliveries); i += chunkSize {
+		end := i + chunkSize
+		if end > len(deliveries) {
+			end = len(deliveries)
+		}
+		chunk := deliveries[i:end]
+
+		wg.Add(1)
+		go func(chunk []models.Delivery) {
+			defer wg.Done()
+
+			rows := deliveriesToRows(chunk)
+			count, err := db.pool.CopyFrom(
+				ctx,
+				pgx.Identifier{"wpl_delivery"},
+				deliveryColumns,
+				pgx.CopyFromRows(rows),
+			)
+			if err != nil {
+				mu.Lock()
+				if firstErr == nil {
+					firstErr = err
+				}
+				mu.Unlock()
+				return
+			}
+			atomic.AddInt64(&totalInserted, count)
+		}(chunk)
+	}
+
+	wg.Wait()
+	return totalInserted, firstErr
+}
+
+var deliveryColumns = []string{
+	"match_id", "innings", "ball", "batting_team", "bowling_team",
+	"striker", "non_striker", "bowler", "runs_off_bat", "extras",
+	"wides", "noballs", "byes", "legbyes", "penalty",
+	"wicket_type", "player_dismissed", "other_wicket_type", "other_player_dismissed",
+}
+
+func deliveriesToRows(deliveries []models.Delivery) [][]interface{} {
+	rows := make([][]interface{}, len(deliveries))
+	for i, d := range deliveries {
+		rows[i] = []interface{}{
+			d.MatchID, d.Innings, d.Ball, d.BattingTeam, d.BowlingTeam,
+			d.Striker, d.NonStriker, d.Bowler, d.RunsOffBat, d.Extras,
+			d.Wides, d.Noballs, d.Byes, d.Legbyes, d.Penalty,
+			d.WicketType, d.PlayerDismissed, d.OtherWicketType, d.OtherPlayerDismissed,
+		}
+	}
+	return rows
+}
+
+// InsertDeliveries inserts deliveries using a pgx.Batch (fallback for conflicts).
 func (db *DB) InsertDeliveries(ctx context.Context, deliveries []models.Delivery) (int64, error) {
 	if len(deliveries) == 0 {
 		return 0, nil
@@ -130,72 +263,65 @@ func (db *DB) InsertDeliveries(ctx context.Context, deliveries []models.Delivery
 	return inserted, nil
 }
 
-func (db *DB) InsertDeliveriesBulk(ctx context.Context, deliveries []models.Delivery) (int64, error) {
-	if len(deliveries) == 0 {
-		return 0, nil
+// BulkUpsertMatchInfos upserts all match info records in a single batch.
+func (db *DB) BulkUpsertMatchInfos(ctx context.Context, infos []*models.MatchInfo) error {
+	if len(infos) == 0 {
+		return nil
 	}
 
-	rows := make([][]interface{}, len(deliveries))
-	for i, d := range deliveries {
-		rows[i] = []interface{}{
-			d.MatchID, d.Innings, d.Ball, d.BattingTeam, d.BowlingTeam,
-			d.Striker, d.NonStriker, d.Bowler, d.RunsOffBat, d.Extras,
-			d.Wides, d.Noballs, d.Byes, d.Legbyes, d.Penalty,
-			d.WicketType, d.PlayerDismissed, d.OtherWicketType, d.OtherPlayerDismissed,
+	batch := &pgx.Batch{}
+	for _, info := range infos {
+		batch.Queue(`
+			INSERT INTO wpl_match_info (
+				match_id, league, version, balls_per_over, gender, season, date,
+				event, match_number, venue, city, toss_winner, toss_decision,
+				player_of_match, winner, winner_runs, winner_wickets
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			ON CONFLICT (match_id) DO UPDATE SET
+				league = EXCLUDED.league,
+				version = EXCLUDED.version,
+				balls_per_over = EXCLUDED.balls_per_over,
+				gender = EXCLUDED.gender,
+				season = EXCLUDED.season,
+				date = EXCLUDED.date,
+				event = EXCLUDED.event,
+				match_number = EXCLUDED.match_number,
+				venue = EXCLUDED.venue,
+				city = EXCLUDED.city,
+				toss_winner = EXCLUDED.toss_winner,
+				toss_decision = EXCLUDED.toss_decision,
+				player_of_match = EXCLUDED.player_of_match,
+				winner = EXCLUDED.winner,
+				winner_runs = EXCLUDED.winner_runs,
+				winner_wickets = EXCLUDED.winner_wickets
+		`, info.ID, info.League, info.Version, info.BallsPerOver, info.Gender, info.Season, info.Date,
+			info.Event, info.MatchNumber, info.Venue, info.City, info.TossWinner, info.TossDecision,
+			info.PlayerOfMatch, info.Winner, info.WinnerRuns, info.WinnerWickets)
+	}
+
+	br := db.pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	for range infos {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("failed to upsert match info: %w", err)
 		}
 	}
 
-	copyCount, err := db.pool.CopyFrom(
-		ctx,
-		pgx.Identifier{"wpl_delivery"},
-		[]string{
-			"match_id", "innings", "ball", "batting_team", "bowling_team",
-			"striker", "non_striker", "bowler", "runs_off_bat", "extras",
-			"wides", "noballs", "byes", "legbyes", "penalty",
-			"wicket_type", "player_dismissed", "other_wicket_type", "other_player_dismissed",
-		},
-		pgx.CopyFromRows(rows),
-	)
-
-	return copyCount, err
+	return nil
 }
 
-func (db *DB) UpsertMatchInfo(ctx context.Context, info *models.MatchInfo) error {
-	_, err := db.pool.Exec(ctx, `
-		INSERT INTO wpl_match_info (
-			match_id, league, version, balls_per_over, gender, season, date,
-			event, match_number, venue, city, toss_winner, toss_decision,
-			player_of_match, winner, winner_runs, winner_wickets
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-		ON CONFLICT (match_id) DO UPDATE SET
-			league = EXCLUDED.league,
-			version = EXCLUDED.version,
-			balls_per_over = EXCLUDED.balls_per_over,
-			gender = EXCLUDED.gender,
-			season = EXCLUDED.season,
-			date = EXCLUDED.date,
-			event = EXCLUDED.event,
-			match_number = EXCLUDED.match_number,
-			venue = EXCLUDED.venue,
-			city = EXCLUDED.city,
-			toss_winner = EXCLUDED.toss_winner,
-			toss_decision = EXCLUDED.toss_decision,
-			player_of_match = EXCLUDED.player_of_match,
-			winner = EXCLUDED.winner,
-			winner_runs = EXCLUDED.winner_runs,
-			winner_wickets = EXCLUDED.winner_wickets
-	`, info.ID, info.League, info.Version, info.BallsPerOver, info.Gender, info.Season, info.Date,
-		info.Event, info.MatchNumber, info.Venue, info.City, info.TossWinner, info.TossDecision,
-		info.PlayerOfMatch, info.Winner, info.WinnerRuns, info.WinnerWickets)
+// BulkDeleteRelatedData deletes related data for all match IDs using ANY().
+// 4 statements total instead of 4×N individual DELETEs.
+func (db *DB) BulkDeleteRelatedData(ctx context.Context, matchIDs []int) error {
+	if len(matchIDs) == 0 {
+		return nil
+	}
 
-	return err
-}
-
-func (db *DB) DeleteRelatedData(ctx context.Context, matchID int) error {
 	tables := []string{"wpl_team", "wpl_player", "wpl_official", "wpl_person_registry"}
-
 	for _, table := range tables {
-		_, err := db.pool.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE match_id = $1", table), matchID)
+		_, err := db.pool.Exec(ctx,
+			fmt.Sprintf("DELETE FROM %s WHERE match_id = ANY($1)", table), matchIDs)
 		if err != nil {
 			return fmt.Errorf("failed to delete from %s: %w", table, err)
 		}
@@ -204,95 +330,76 @@ func (db *DB) DeleteRelatedData(ctx context.Context, matchID int) error {
 	return nil
 }
 
-func (db *DB) InsertTeams(ctx context.Context, teams []models.Team) error {
+// InsertTeamsBulk inserts all teams via CopyFrom.
+func (db *DB) InsertTeamsBulk(ctx context.Context, teams []models.Team) (int64, error) {
 	if len(teams) == 0 {
-		return nil
+		return 0, nil
 	}
 
-	batch := &pgx.Batch{}
-	for _, t := range teams {
-		batch.Queue(`INSERT INTO wpl_team (match_id, team_name) VALUES ($1, $2)`, t.MatchID, t.TeamName)
+	rows := make([][]interface{}, len(teams))
+	for i, t := range teams {
+		rows[i] = []interface{}{t.MatchID, t.TeamName}
 	}
 
-	br := db.pool.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for range teams {
-		if _, err := br.Exec(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return db.pool.CopyFrom(ctx,
+		pgx.Identifier{"wpl_team"},
+		[]string{"match_id", "team_name"},
+		pgx.CopyFromRows(rows),
+	)
 }
 
-func (db *DB) InsertPlayers(ctx context.Context, players []models.Player) error {
+// InsertPlayersBulk inserts all players via CopyFrom.
+func (db *DB) InsertPlayersBulk(ctx context.Context, players []models.Player) (int64, error) {
 	if len(players) == 0 {
-		return nil
+		return 0, nil
 	}
 
-	batch := &pgx.Batch{}
-	for _, p := range players {
-		batch.Queue(`INSERT INTO wpl_player (match_id, team_name, player_name) VALUES ($1, $2, $3)`,
-			p.MatchID, p.TeamName, p.PlayerName)
+	rows := make([][]interface{}, len(players))
+	for i, p := range players {
+		rows[i] = []interface{}{p.MatchID, p.TeamName, p.PlayerName}
 	}
 
-	br := db.pool.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for range players {
-		if _, err := br.Exec(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return db.pool.CopyFrom(ctx,
+		pgx.Identifier{"wpl_player"},
+		[]string{"match_id", "team_name", "player_name"},
+		pgx.CopyFromRows(rows),
+	)
 }
 
-func (db *DB) InsertOfficials(ctx context.Context, officials []models.Official) error {
+// InsertOfficialsBulk inserts all officials via CopyFrom.
+func (db *DB) InsertOfficialsBulk(ctx context.Context, officials []models.Official) (int64, error) {
 	if len(officials) == 0 {
-		return nil
+		return 0, nil
 	}
 
-	batch := &pgx.Batch{}
-	for _, o := range officials {
-		batch.Queue(`INSERT INTO wpl_official (match_id, official_type, official_name) VALUES ($1, $2, $3)`,
-			o.MatchID, o.OfficialType, o.OfficialName)
+	rows := make([][]interface{}, len(officials))
+	for i, o := range officials {
+		rows[i] = []interface{}{o.MatchID, o.OfficialType, o.OfficialName}
 	}
 
-	br := db.pool.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for range officials {
-		if _, err := br.Exec(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return db.pool.CopyFrom(ctx,
+		pgx.Identifier{"wpl_official"},
+		[]string{"match_id", "official_type", "official_name"},
+		pgx.CopyFromRows(rows),
+	)
 }
 
-func (db *DB) InsertPersonRegistry(ctx context.Context, registry []models.PersonRegistry) error {
+// InsertPersonRegistryBulk inserts all person registry entries via CopyFrom.
+func (db *DB) InsertPersonRegistryBulk(ctx context.Context, registry []models.PersonRegistry) (int64, error) {
 	if len(registry) == 0 {
-		return nil
+		return 0, nil
 	}
 
-	batch := &pgx.Batch{}
-	for _, r := range registry {
-		batch.Queue(`INSERT INTO wpl_person_registry (match_id, person_name, registry_id) VALUES ($1, $2, $3)`,
-			r.MatchID, r.PersonName, r.RegistryID)
+	rows := make([][]interface{}, len(registry))
+	for i, r := range registry {
+		rows[i] = []interface{}{r.MatchID, r.PersonName, r.RegistryID}
 	}
 
-	br := db.pool.SendBatch(ctx, batch)
-	defer br.Close()
-
-	for range registry {
-		if _, err := br.Exec(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return db.pool.CopyFrom(ctx,
+		pgx.Identifier{"wpl_person_registry"},
+		[]string{"match_id", "person_name", "registry_id"},
+		pgx.CopyFromRows(rows),
+	)
 }
 
 func (db *DB) BeginTx(ctx context.Context) (pgx.Tx, error) {
