@@ -4,18 +4,24 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/shahparshva72/boundary-bytes-parser/internal/database"
+	"github.com/shahparshva72/boundary-bytes-parser/internal/leagues"
 	"github.com/shahparshva72/boundary-bytes-parser/internal/models"
 	"github.com/shahparshva72/boundary-bytes-parser/internal/parser"
+	"github.com/shahparshva72/boundary-bytes-parser/internal/people"
 )
 
 type Seeder struct {
 	db          *database.DB
-	config      models.LeagueConfig
+	directory   string
+	registry    *leagues.Registry
+	only        map[string]bool
+	people      people.Register
 	parser      *parser.CSVParser
 	concurrency int
 }
@@ -35,18 +41,28 @@ type parsedInfo struct {
 	registry  []models.PersonRegistry
 }
 
-func NewSeeder(db *database.DB, config models.LeagueConfig, concurrency int) *Seeder {
+type eventKey struct {
+	event  string
+	gender string
+}
+
+// NewSeeder loads one Cricsheet csv2 directory. only limits loading to the
+// given league codes; nil loads every league in the registry.
+func NewSeeder(db *database.DB, directory string, registry *leagues.Registry, only map[string]bool, register people.Register, concurrency int) *Seeder {
 	return &Seeder{
 		db:          db,
-		config:      config,
-		parser:      parser.NewCSVParser(config),
+		directory:   directory,
+		registry:    registry,
+		only:        only,
+		people:      register,
+		parser:      parser.NewCSVParser(directory),
 		concurrency: concurrency,
 	}
 }
 
 func (s *Seeder) Run(ctx context.Context, skipExisting bool) error {
-	if _, err := os.Stat(s.config.CSVDirectory); os.IsNotExist(err) {
-		fmt.Printf("Directory %s does not exist, skipping %s\n", s.config.CSVDirectory, s.config.League)
+	if _, err := os.Stat(s.directory); os.IsNotExist(err) {
+		fmt.Printf("Directory %s does not exist, skipping\n", s.directory)
 		return nil
 	}
 
@@ -56,33 +72,43 @@ func (s *Seeder) Run(ctx context.Context, skipExisting bool) error {
 	}
 
 	if skipExisting {
-		existingIDs, err := s.db.GetExistingMatchIDs(ctx, s.config.League)
+		existingIDs, err := s.db.GetExistingMatchIDs(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get existing match IDs: %w", err)
 		}
 
 		if len(existingIDs) > 0 {
+			before := len(matchFiles)
 			matchFiles = filterNewFiles(matchFiles, existingIDs, false)
 			infoFiles = filterNewFiles(infoFiles, existingIDs, true)
-			fmt.Printf("Skipping %d existing matches for %s\n", len(existingIDs), s.config.League)
+			fmt.Printf("Skipping %d already-loaded matches in %s\n", before-len(matchFiles), s.directory)
 		}
 	}
 
-	fmt.Printf("Found %d new matches and %d new info files for %s\n", len(matchFiles), len(infoFiles), s.config.League)
+	fmt.Printf("Found %d new matches and %d new info files in %s\n", len(matchFiles), len(infoFiles), s.directory)
 
 	if len(matchFiles) == 0 && len(infoFiles) == 0 {
-		fmt.Printf("No new data to process for %s\n", s.config.League)
+		fmt.Printf("No new data to process in %s\n", s.directory)
 		return nil
 	}
 
 	totalStart := time.Now()
 
 	// ── Phase 1: Parse all files concurrently (CPU-bound, no DB) ──
+	// Info files come first: they carry the event and gender that decide
+	// each match's league, and the registry IDs used to make names unique.
 	fmt.Println("Phase 1: Parsing all CSV files...")
 	parseStart := time.Now()
 
-	parsedMatches, matchParseErrors := s.parseAllMatchFiles(matchFiles)
 	parsedInfos, infoParseErrors := s.parseAllInfoFiles(infoFiles)
+	parsedInfos, leagueByMatch := s.resolveLeagues(parsedInfos)
+	matchFiles = filterResolvedFiles(matchFiles, leagueByMatch)
+	parsedMatches, matchParseErrors := s.parseAllMatchFiles(matchFiles)
+
+	for i := range parsedMatches {
+		parsedMatches[i].match.League = leagueByMatch[parsedMatches[i].match.ID]
+	}
+	s.applyUniqueNames(parsedInfos, parsedMatches)
 
 	parseDuration := time.Since(parseStart)
 	fmt.Printf("  Parsed %d matches + %d info files in %s\n",
@@ -120,12 +146,158 @@ func (s *Seeder) Run(ctx context.Context, skipExisting bool) error {
 	fmt.Printf("  Wrote %d matches + %d deliveries in %s\n",
 		len(parsedMatches), deliveryCount, writeDuration.Round(time.Millisecond))
 
+	perLeague := make(map[string]int)
+	for _, m := range parsedMatches {
+		perLeague[m.match.League]++
+	}
+	codes := make([]string, 0, len(perLeague))
+	for code := range perLeague {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+	for _, code := range codes {
+		fmt.Printf("  %s: %d matches\n", code, perLeague[code])
+	}
+
 	rate := float64(len(parsedMatches)) / totalDuration.Seconds()
 	fmt.Printf("%s seed completed: %d matches, %d deliveries in %s (%.0f matches/sec)\n",
-		s.config.League, len(parsedMatches), deliveryCount,
+		s.directory, len(parsedMatches), deliveryCount,
 		totalDuration.Round(time.Millisecond), rate)
 
 	return nil
+}
+
+// resolveLeagues assigns each match its league from Cricsheet's (event,
+// gender) and drops matches whose event isn't in the registry or whose league
+// wasn't requested. Unmapped events are reported, never guessed.
+func (s *Seeder) resolveLeagues(infos []parsedInfo) ([]parsedInfo, map[int]string) {
+	leagueByMatch := make(map[int]string, len(infos))
+	unmapped := make(map[eventKey]int)
+	resolved := infos[:0]
+
+	for _, info := range infos {
+		l, ok := s.registry.Resolve(info.matchInfo.Event, info.matchInfo.Gender)
+		if !ok {
+			unmapped[eventKey{info.matchInfo.Event, info.matchInfo.Gender}]++
+			continue
+		}
+		if s.only != nil && !s.only[l.Code] {
+			continue
+		}
+		info.matchInfo.League = l.Code
+		leagueByMatch[info.matchInfo.ID] = l.Code
+		resolved = append(resolved, info)
+	}
+
+	if len(unmapped) > 0 {
+		keys := make([]eventKey, 0, len(unmapped))
+		total := 0
+		for k, n := range unmapped {
+			keys = append(keys, k)
+			total += n
+		}
+		sort.Slice(keys, func(i, j int) bool { return unmapped[keys[i]] > unmapped[keys[j]] })
+
+		// A league folder should have none; Cricsheet's mixed "recently added"
+		// zips also carry internationals and other formats, so cap the list.
+		const maxListed = 15
+		fmt.Printf("  WARNING: skipped %d matches with events not in leagues.json:\n", total)
+		for _, k := range keys[:min(maxListed, len(keys))] {
+			fmt.Printf("    - %q (%s): %d matches\n", k.event, k.gender, unmapped[k])
+		}
+		if len(keys) > maxListed {
+			fmt.Printf("    ... and %d more events\n", len(keys)-maxListed)
+		}
+	}
+
+	return resolved, leagueByMatch
+}
+
+// applyUniqueNames replaces each player's Cricsheet name with the people
+// register's unique_name, using the match's own registry to identify people.
+// unique_name equals name for almost everyone, so only clashing names change.
+//
+// A few older files name a player differently in the info file ("Carolyn
+// Esterhuizen") and the ball-by-ball file ("C Esterhuizen"), so the register's
+// short name is mapped too, as long as no one else in the match shares it.
+func (s *Seeder) applyUniqueNames(infos []parsedInfo, matches []parsedMatch) {
+	renamesByMatch := make(map[int]map[string]string)
+	missing := make(map[string]bool)
+
+	for i := range infos {
+		info := &infos[i]
+		renames := make(map[string]string)
+		registered := make(map[string]bool, len(info.registry))
+		shortNames := make(map[string][]string)
+		for _, r := range info.registry {
+			registered[r.PersonName] = true
+		}
+		for j := range info.registry {
+			r := &info.registry[j]
+			person, ok := s.people[r.RegistryID]
+			if !ok {
+				missing[r.RegistryID] = true
+				continue
+			}
+			if person.Name != r.PersonName && !registered[person.Name] {
+				shortNames[person.Name] = append(shortNames[person.Name], person.UniqueName)
+			}
+			if person.UniqueName != r.PersonName {
+				renames[r.PersonName] = person.UniqueName
+				r.PersonName = person.UniqueName
+			}
+		}
+		for short, uniques := range shortNames {
+			if len(uniques) == 1 && short != uniques[0] {
+				renames[short] = uniques[0]
+			}
+		}
+		if len(renames) == 0 {
+			continue
+		}
+		renamesByMatch[info.matchInfo.ID] = renames
+
+		for j := range info.players {
+			rename(&info.players[j].PlayerName, renames)
+		}
+		if info.matchInfo.PlayerOfMatch != nil {
+			rename(info.matchInfo.PlayerOfMatch, renames)
+		}
+	}
+
+	renamed := 0
+	for _, m := range matches {
+		renames, ok := renamesByMatch[m.match.ID]
+		if !ok {
+			continue
+		}
+		renamed++
+		for j := range m.deliveries {
+			d := &m.deliveries[j]
+			rename(&d.Striker, renames)
+			rename(&d.NonStriker, renames)
+			rename(&d.Bowler, renames)
+			if d.PlayerDismissed != nil {
+				rename(d.PlayerDismissed, renames)
+			}
+			if d.OtherPlayerDismissed != nil {
+				rename(d.OtherPlayerDismissed, renames)
+			}
+		}
+	}
+
+	if renamed > 0 {
+		fmt.Printf("  Applied unique player names in %d matches\n", renamed)
+	}
+	if len(missing) > 0 {
+		fmt.Printf("  WARNING: %d registry IDs not in people.csv (names kept as-is); download a fresh register\n", len(missing))
+	}
+}
+
+func rename(name *string, renames map[string]string) {
+	if unique, ok := renames[*name]; ok {
+		*name = unique
+	}
 }
 
 // parseAllMatchFiles parses all match CSV files concurrently.
@@ -255,6 +427,15 @@ func (s *Seeder) bulkWriteMatchData(ctx context.Context, data []parsedMatch) (in
 		return 0, fmt.Errorf("failed to bulk upsert matches: %w", err)
 	}
 
+	// Re-seeded matches would otherwise get a second copy of every delivery.
+	matchIDs := make([]int, len(matches))
+	for i, m := range matches {
+		matchIDs[i] = m.ID
+	}
+	if err := s.db.DeleteMatchDeliveries(ctx, matchIDs); err != nil {
+		return 0, fmt.Errorf("failed to clear deliveries for re-seed: %w", err)
+	}
+
 	// Flatten all deliveries into one slice
 	allDeliveries := make([]models.Delivery, 0, totalDeliveries)
 	for _, d := range data {
@@ -331,6 +512,22 @@ func (s *Seeder) bulkWriteInfoData(ctx context.Context, data []parsedInfo) error
 	}
 
 	return nil
+}
+
+// filterResolvedFiles keeps match files whose info file resolved to a league.
+// A match file without an info file can't be assigned a league, so it's skipped.
+func filterResolvedFiles(files []string, leagueByMatch map[int]string) []string {
+	var kept []string
+	for _, f := range files {
+		matchID, err := parser.ExtractMatchID(f, false)
+		if err != nil {
+			continue
+		}
+		if _, ok := leagueByMatch[matchID]; ok {
+			kept = append(kept, f)
+		}
+	}
+	return kept
 }
 
 func filterNewFiles(files []string, existingIDs map[int]bool, isInfo bool) []string {

@@ -19,18 +19,20 @@ var (
 	infoFileRegex  = regexp.MustCompile(`^(\d+)_info\.csv$`)
 )
 
+// CSVParser reads one Cricsheet csv2 directory. It does not assign leagues:
+// the seeder resolves each match's league from its info file.
 type CSVParser struct {
-	config models.LeagueConfig
+	directory string
 }
 
-func NewCSVParser(config models.LeagueConfig) *CSVParser {
-	return &CSVParser{config: config}
+func NewCSVParser(directory string) *CSVParser {
+	return &CSVParser{directory: directory}
 }
 
 func (p *CSVParser) GetMatchFiles() ([]string, []string, error) {
-	entries, err := os.ReadDir(p.config.CSVDirectory)
+	entries, err := os.ReadDir(p.directory)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read directory %s: %w", p.config.CSVDirectory, err)
+		return nil, nil, fmt.Errorf("failed to read directory %s: %w", p.directory, err)
 	}
 
 	var matchFiles, infoFiles []string
@@ -44,7 +46,7 @@ func (p *CSVParser) GetMatchFiles() ([]string, []string, error) {
 			continue
 		}
 
-		fullPath := filepath.Join(p.config.CSVDirectory, name)
+		fullPath := filepath.Join(p.directory, name)
 
 		if strings.Contains(name, "_info") {
 			infoFiles = append(infoFiles, fullPath)
@@ -102,7 +104,6 @@ func (p *CSVParser) ParseMatchFile(filePath string) (*models.Match, []models.Del
 
 			match = &models.Match{
 				ID:        matchID,
-				League:    p.config.League,
 				Season:    getField(record, headerIndex, "season"),
 				StartDate: startDate,
 				Venue:     strings.Trim(getField(record, headerIndex, "venue"), "\""),
@@ -159,7 +160,6 @@ func (p *CSVParser) ParseInfoFile(filePath string) (*models.MatchInfo, []models.
 
 	matchInfo := &models.MatchInfo{
 		ID:           matchID,
-		League:       p.config.League,
 		BallsPerOver: 6,
 	}
 

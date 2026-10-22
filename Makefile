@@ -1,4 +1,4 @@
-.PHONY: build run clean test build-scraper run-scraper scrape-test build-categoriser run-categoriser build-player-styles run-player-styles
+.PHONY: build run run-league sync-players list-sources clean test build-scraper run-scraper scrape-test build-categoriser run-categoriser build-player-styles run-player-styles
 
 build:
 	go build -o bin/seeder ./cmd/seeder
@@ -23,6 +23,17 @@ run-wbbl:
 
 run-sa20:
 	go run ./cmd/seeder -league SA20
+
+# Any league codes from internal/leagues/leagues.json, e.g. make run-league LEAGUE=PSL,CPL
+run-league:
+	go run ./cmd/seeder -league $(LEAGUE)
+
+# Sync stored player names to people.csv unique_name and refresh player_slug
+sync-players:
+	go run ./cmd/seeder -sync-only
+
+list-sources:
+	go run ./cmd/seeder -list-sources
 
 test:
 	go test ./...
