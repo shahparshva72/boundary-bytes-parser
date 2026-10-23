@@ -15,7 +15,7 @@ Go CLI tool parsing cricket ball-by-ball CSV data into PostgreSQL using concurre
 
 **Key directories**:
 - `cmd/seeder/` - CLI entry point with league selection flags
-- `internal/leagues/` - `leagues.json`: league codes, Cricsheet archive folder, event names (per gender) and team renames. Single source of truth for which leagues exist
+- `internal/leagues/` - `leagues.json`: league codes, Cricsheet archive folder, event names (per gender) and team renames. Single source of truth for which leagues exist. `boundary-bytes-go-backend/internal/leagues/leagues.json` is a copy; keep them identical
 - `internal/people/` - Cricsheet people register (`people.csv`): registry ID -> name / unique_name
 - `internal/database/` - PostgreSQL connection pooling and CRUD operations (pgx)
 - `internal/parser/` - CSV parsing logic
