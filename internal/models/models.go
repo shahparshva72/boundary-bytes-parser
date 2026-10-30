@@ -80,11 +80,6 @@ type PersonRegistry struct {
 	RegistryID string
 }
 
-type LeagueConfig struct {
-	League       string
-	CSVDirectory string
-}
-
 type PlayerStyle struct {
 	Identifier      string
 	KeyCricinfo     int

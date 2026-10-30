@@ -34,3 +34,5 @@ go.work
 Thumbs.db
 
 .copilotignore
+# Update script logs
+logs/

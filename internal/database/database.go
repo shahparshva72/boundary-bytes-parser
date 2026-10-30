@@ -81,10 +81,10 @@ func (db *DB) CheckLeagueExists(ctx context.Context, league string) (bool, int, 
 	return true, matchID, nil
 }
 
-func (db *DB) GetExistingMatchIDs(ctx context.Context, league string) (map[int]bool, error) {
-	rows, err := db.pool.Query(ctx, `
-		SELECT match_id FROM wpl_match WHERE league = $1
-	`, league)
+// GetExistingMatchIDs returns every loaded match ID. Cricsheet match IDs are
+// globally unique, so this works for any source directory.
+func (db *DB) GetExistingMatchIDs(ctx context.Context) (map[int]bool, error) {
+	rows, err := db.pool.Query(ctx, `SELECT match_id FROM wpl_match`)
 	if err != nil {
 		return nil, err
 	}
@@ -320,6 +320,25 @@ func (db *DB) BulkDeleteRelatedData(ctx context.Context, matchIDs []int) error {
 
 	tables := []string{"wpl_team", "wpl_player", "wpl_official", "wpl_person_registry"}
 	for _, table := range tables {
+		_, err := db.pool.Exec(ctx,
+			fmt.Sprintf("DELETE FROM %s WHERE match_id = ANY($1)", table), matchIDs)
+		if err != nil {
+			return fmt.Errorf("failed to delete from %s: %w", table, err)
+		}
+	}
+
+	return nil
+}
+
+// DeleteMatchDeliveries removes deliveries (and the batting positions derived
+// from them) for matches about to be re-inserted, so a re-seed doesn't
+// duplicate rows.
+func (db *DB) DeleteMatchDeliveries(ctx context.Context, matchIDs []int) error {
+	if len(matchIDs) == 0 {
+		return nil
+	}
+
+	for _, table := range []string{"wpl_batting_position", "wpl_delivery"} {
 		_, err := db.pool.Exec(ctx,
 			fmt.Sprintf("DELETE FROM %s WHERE match_id = ANY($1)", table), matchIDs)
 		if err != nil {
