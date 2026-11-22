@@ -28,6 +28,8 @@ Go CLI tool parsing cricket ball-by-ball CSV data into PostgreSQL using concurre
 
 **Player names**: names are stored as Cricsheet's `unique_name` (people.csv), which differs from `name` only where two people share a name. Every seeder run ends by syncing stored names to people.csv and refreshing `player_slug` (keyed by `registry_id`; existing slugs never change).
 
+**League baseline**: every seeder run ends by calling `refresh_league_phase_baseline()` (backend migration 000011), which recomputes the per-league, per-season, per-phase scoring averages used by the API's league-adjusted strike rate and economy. It is skipped with a message if the database does not have the function yet.
+
 **Dependencies**: github.com/jackc/pgx/v5 (database), github.com/joho/godotenv (env loading)
 
 ## Code Style
