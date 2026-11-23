@@ -131,6 +131,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	refreshed, err := db.RefreshLeaguePhaseBaseline(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error refreshing league baseline: %v\n", err)
+		os.Exit(1)
+	}
+	if refreshed {
+		fmt.Println("\nRefreshed league phase baseline")
+	} else {
+		fmt.Println("\nSkipped league phase baseline: refresh_league_phase_baseline() is not in this database yet")
+	}
+
 	elapsed := time.Since(startTime)
 	fmt.Printf("\nMulti-league seed completed in %s\n", elapsed.Round(time.Second))
 }
